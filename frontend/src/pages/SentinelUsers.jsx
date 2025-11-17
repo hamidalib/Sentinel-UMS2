@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import StatsCards from "../components/StatsCards";
 import SentinelUsersTable from "../components/SentinelUsersTable";
 
@@ -6,24 +6,22 @@ export default function SentinelUsers() {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchRecords = useCallback(() => {
+    setLoading(true);
     const token = localStorage.getItem("token");
-    
+
     fetch("http://localhost:5000/api/records", {
       headers: {
-        "Authorization": `Bearer ${token}`,
+        Authorization: token ? `Bearer ${token}` : undefined,
         "Content-Type": "application/json",
       },
     })
       .then((res) => {
-        if (!res.ok) {
-          throw new Error("Failed to fetch records");
-        }
+        if (!res.ok) throw new Error("Failed to fetch records");
         return res.json();
       })
       .then((data) => {
-        // API returns { records: [...], totalRecords: ... }
-        setRecords(data.records || []);
+        setRecords(data.records || data || []);
         setLoading(false);
       })
       .catch((err) => {
@@ -31,6 +29,17 @@ export default function SentinelUsers() {
         setLoading(false);
       });
   }, []);
+
+  useEffect(() => {
+    fetchRecords();
+
+    const handler = () => fetchRecords();
+    window.addEventListener("recordsImported", handler);
+
+    return () => {
+      window.removeEventListener("recordsImported", handler);
+    };
+  }, [fetchRecords]);
 
   return (
     <div>
@@ -42,7 +51,7 @@ export default function SentinelUsers() {
       {loading ? (
         <p className="mt-6 text-gray-500">Loading...</p>
       ) : (
-        <SentinelUsersTable data={records} />
+        <SentinelUsersTable data={records} refreshData={fetchRecords} />
       )}
     </div>
   );

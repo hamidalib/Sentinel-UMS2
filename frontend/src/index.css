@@ -114,6 +114,13 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html,
+  body,
+  #root {
+    font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+      Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji",
+      "Segoe UI Emoji", "Segoe UI Symbol";
+  }
   body {
     @apply bg-background text-foreground;
   }

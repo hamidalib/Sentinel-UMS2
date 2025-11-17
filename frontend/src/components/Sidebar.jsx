@@ -1,36 +1,65 @@
+// frontend/src/components/Sidebar.jsx
 import { NavLink } from "react-router-dom";
-import { Users, Shield, Settings, LogOut } from "lucide-react";
+import {
+  UsersRound,
+  Folder,
+  Settings,
+  LogOut,
+  UploadCloud,
+} from "lucide-react";
+import logo from "@/Assets/sentinel-logo.svg";
 
-export default function Sidebar() {
+export default function Sidebar({ onAddUserClick, onImportClick }) {
   return (
-    <div className="h-screen w-64 bg-[#0f0f0f] border-r border-gray-800 flex flex-col text-gray-300">
-
-      <div className="px-6 py-6 text-xl font-bold text-white">
-        Sentinel UMS
+    <div className="p- h-screen w-64 bg-[#0f0f0f] border-r border-gray-800 flex flex-col text-gray-300">
+      <div className="px-4 py-4 text-xl font-bold text-white flex items-center justify-center">
+        <img
+          src={logo}
+          alt="Sentinel Logo"
+          className="w-auto h-auto inline-block"
+        />
       </div>
 
-      <nav className="flex-1 px-4 space-y-1">
+      {/* Add Sentinel User Button */}
+      <div className="p-2">
+        <button
+          onClick={onAddUserClick}
+          className="cursor-pointer w-full bg-[#FFC300] hover:bg-blue-700 py-2 rounded-lg mb-2 text-[#001D3D]"
+        >
+          Add Sentinel User +
+        </button>
+
+        {/* Import CSV Button */}
+        <button
+          onClick={onImportClick}
+          className="cursor-pointer w-full bg-[#00B38F] hover:bg-green-700 py-2 rounded-lg text-white"
+        >
+          Import CSV
+        </button>
+      </div>
+
+      <nav className="p-2 flex-1 space-y-1">
         <NavLink
           to="/dashboard/sentinel-users"
           className={({ isActive }) =>
-            `flex items-center px-3 py-2 rounded-lg text-sm 
+            `flex items-center px-3 py-2 rounded-lg text-sm
              hover:bg-gray-800 transition 
              ${isActive ? "bg-gray-800 text-white" : ""}`
           }
         >
-          <Shield className="w-5 h-5 mr-3" />
+          <Folder className="w-5 h-5 mr-3" />
           Sentinel Users
         </NavLink>
 
         <NavLink
           to="/dashboard/admin-users"
           className={({ isActive }) =>
-            `flex items-center px-3 py-2 rounded-lg text-sm 
+            `flex items-center px-3 py-2  rounded-lg text-sm 
              hover:bg-gray-800 transition 
              ${isActive ? "bg-gray-800 text-white" : ""}`
           }
         >
-          <Users className="w-5 h-5 mr-3" />
+          <UsersRound className="w-5 h-5 mr-3" />
           Admin Users
         </NavLink>
       </nav>

@@ -89,6 +89,22 @@ router.get("/", verifyToken, async (req, res) => {
   }
 });
 
+// GET /api/users/count - total admin users
+router.get("/count", verifyToken, async (req, res) => {
+  try {
+    const result = await pool
+      .request()
+      .query("SELECT COUNT(*) AS totalAdmins FROM Users");
+
+    return res.json({ totalAdmins: result.recordset[0].totalAdmins || 0 });
+  } catch (err) {
+    console.error("ADMIN COUNT ERROR:", err);
+    return res
+      .status(500)
+      .json({ error: "Failed to fetch admin user count" });
+  }
+});
+
 // ✅ POST /api/users/login
 // Logs in a user and returns a JWT token
 
@@ -141,6 +157,24 @@ router.post("/login", async (req, res) => {
   } catch (err) {
     console.error("LOGIN ERROR:", err);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/users/refresh - issue a new token before expiry
+router.post("/refresh", verifyToken, async (req, res) => {
+  try {
+    const { id, username, role } = req.user;
+
+    const newToken = jwt.sign(
+      { id, username, role },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    res.json({ token: newToken });
+  } catch (err) {
+    console.error("TOKEN REFRESH ERROR:", err);
+    res.status(500).json({ error: "Unable to refresh token" });
   }
 });
 
