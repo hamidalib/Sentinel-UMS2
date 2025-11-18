@@ -268,17 +268,27 @@ export default function SentinelUsersTable({ data, refreshData }) {
         <table className="w-full border-collapse">
           <thead>
             <tr className="bg-[#171b20] border-b border-[#ffffff54] text-left text-gray-300">
-              <th className="p-3 font-semibold">#</th>
-              <th className="p-3 font-semibold">Username</th>
-              <th className="p-3 font-semibold">Password</th>
-              <th className="p-3 font-semibold">Department</th>
-              <th className="p-3 font-semibold">Full Name</th>
-              <th className="p-3 font-semibold">Setup</th>
-              <th className="font-semibold text-center w-fit">Setup Code</th>
-              <th className="p-3 font-semibold text-center">Appt Code</th>
-              <th className="p-3 font-semibold text-center">Remarks</th>
-              <th className="p-3 font-semibold text-center">IP Address</th>
-              <th className="p-3 font-semibold text-center">Actions</th>
+              <th className="p-3 font-semibold text-white">#</th>
+              <th className="p-3 font-semibold text-white">Username</th>
+              <th className="p-3 font-semibold text-white">Password</th>
+              <th className="p-3 font-semibold text-white">Department</th>
+              <th className="p-3 font-semibold text-white">Full Name</th>
+              <th className="p-3 font-semibold text-white">Setup</th>
+              <th className="font-semibold text-center w-fit text-white">
+                Setup Code
+              </th>
+              <th className="p-3 font-semibold text-center text-white">
+                Appt Code
+              </th>
+              <th className="p-3 font-semibold text-center text-white">
+                Remarks
+              </th>
+              <th className="p-3 font-semibold text-center text-white">
+                IP Address
+              </th>
+              <th className="p-3 font-semibold text-center text-white">
+                Actions
+              </th>
             </tr>
           </thead>
 

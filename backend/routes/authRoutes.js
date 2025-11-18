@@ -99,9 +99,7 @@ router.get("/count", verifyToken, async (req, res) => {
     return res.json({ totalAdmins: result.recordset[0].totalAdmins || 0 });
   } catch (err) {
     console.error("ADMIN COUNT ERROR:", err);
-    return res
-      .status(500)
-      .json({ error: "Failed to fetch admin user count" });
+    return res.status(500).json({ error: "Failed to fetch admin user count" });
   }
 });
 
@@ -165,11 +163,9 @@ router.post("/refresh", verifyToken, async (req, res) => {
   try {
     const { id, username, role } = req.user;
 
-    const newToken = jwt.sign(
-      { id, username, role },
-      process.env.JWT_SECRET,
-      { expiresIn: "1h" }
-    );
+    const newToken = jwt.sign({ id, username, role }, process.env.JWT_SECRET, {
+      expiresIn: "1h",
+    });
 
     res.json({ token: newToken });
   } catch (err) {
@@ -179,3 +175,66 @@ router.post("/refresh", verifyToken, async (req, res) => {
 });
 
 export default router;
+
+// Add update and delete endpoints for admin users
+// PUT /api/users/:id  -> update username, role, and optionally password
+router.put("/:id", verifyToken, async (req, res) => {
+  const { id } = req.params;
+  const { username, password, role } = req.body;
+
+  try {
+    // Fetch existing user to preserve password if not provided
+    const existingReq = pool.request();
+    existingReq.input("id", sql.Int, id);
+    const existingRes = await existingReq.query(
+      "SELECT password_hash FROM Users WHERE id = @id"
+    );
+    const existingHash =
+      existingRes.recordset && existingRes.recordset[0]
+        ? existingRes.recordset[0].password_hash
+        : null;
+
+    let passwordHash = existingHash;
+    if (
+      typeof password !== "undefined" &&
+      password !== null &&
+      password !== ""
+    ) {
+      passwordHash = await bcrypt.hash(password, 10);
+    }
+
+    const request = pool.request();
+    request.input("id", sql.Int, id);
+    request.input("username", sql.NVarChar(50), username || null);
+    request.input("password_hash", sql.NVarChar(255), passwordHash || null);
+    request.input("role", sql.NVarChar(50), role || null);
+
+    const updateQuery = `
+      UPDATE Users
+      SET username = @username,
+          password_hash = @password_hash,
+          role = @role
+      WHERE id = @id
+    `;
+
+    await request.query(updateQuery);
+    return res.json({ message: "User updated" });
+  } catch (err) {
+    console.error("Error updating user:", err);
+    return res.status(500).json({ error: "Failed to update user" });
+  }
+});
+
+// DELETE /api/users/:id -> delete user
+router.delete("/:id", verifyToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const request = pool.request();
+    request.input("id", sql.Int, id);
+    await request.query("DELETE FROM Users WHERE id = @id");
+    return res.json({ message: "User deleted" });
+  } catch (err) {
+    console.error("Error deleting user:", err);
+    return res.status(500).json({ error: "Failed to delete user" });
+  }
+});
