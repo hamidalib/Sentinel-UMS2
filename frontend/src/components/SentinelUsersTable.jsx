@@ -7,6 +7,8 @@ export default function SentinelUsersTable({ data, refreshData }) {
   const [sortOrder, setSortOrder] = useState("latest");
   const [departments, setDepartments] = useState([]);
   const [selectedDept, setSelectedDept] = useState("All");
+  const [setupCodes, setSetupCodes] = useState([]);
+  const [selectedSetupCode, setSelectedSetupCode] = useState("All");
   const [editingItem, setEditingItem] = useState(null);
 
   // Pagination State
@@ -17,9 +19,31 @@ export default function SentinelUsersTable({ data, refreshData }) {
   useEffect(() => {
     if (Array.isArray(data)) {
       setFiltered(data);
-
       const uniqueDepts = [...new Set(data.map((d) => d.dept))];
-      setDepartments(uniqueDepts);
+      const filteredDepts = uniqueDepts.filter(
+        (d) => d !== null && d !== undefined && String(d).trim() !== ""
+      );
+
+      const uniqueSetups = [...new Set(data.map((d) => d.setupcode))];
+      const filteredSetups = uniqueSetups.filter(
+        (s) => s !== null && s !== undefined && String(s).trim() !== ""
+      );
+
+      // Numeric-aware sort: if both values are numeric, compare as numbers; otherwise localeCompare
+      const numericAwareSort = (a, b) => {
+        const na = Number(a);
+        const nb = Number(b);
+        const aIsNum = !Number.isNaN(na) && String(a).trim() !== "";
+        const bIsNum = !Number.isNaN(nb) && String(b).trim() !== "";
+        if (aIsNum && bIsNum) return na - nb;
+        return String(a).localeCompare(String(b));
+      };
+
+      filteredDepts.sort(numericAwareSort);
+      filteredSetups.sort(numericAwareSort);
+
+      setDepartments(filteredDepts);
+      setSetupCodes(filteredSetups);
     }
   }, [data]);
 
@@ -43,16 +67,50 @@ export default function SentinelUsersTable({ data, refreshData }) {
       updated = updated.filter((row) => row.dept === selectedDept);
     }
 
-    // Sort by created_at
-    updated.sort((a, b) => {
-      const da = new Date(a.created_at);
-      const db = new Date(b.created_at);
-      return sortOrder === "latest" ? db - da : da - db;
-    });
+    // Setup Code filter
+    if (selectedSetupCode !== "All") {
+      updated = updated.filter((row) => row.setupcode === selectedSetupCode);
+    }
+
+    // Sorting behavior:
+    // - When no specific filter is applied, sort by created_at (latest/oldest)
+    // - When a filter is applied (department or setup code), sort by numeric suffix in username if present
+    const extractTrailingNumber = (username) => {
+      if (!username) return NaN;
+      const s = String(username).trim();
+      // match last sequence of digits
+      const m = s.match(/(\d+)\s*$/);
+      if (m && m[1]) return Number(m[1]);
+      return NaN;
+    };
+
+    const isFilterActive =
+      selectedDept !== "All" || selectedSetupCode !== "All";
+
+    if (isFilterActive) {
+      updated.sort((a, b) => {
+        const an = extractTrailingNumber(a.username);
+        const bn = extractTrailingNumber(b.username);
+        const aName = String(a.username || "");
+        const bName = String(b.username || "");
+
+        if (!isNaN(an) && !isNaN(bn)) return an - bn; // numeric compare
+        if (!isNaN(an)) return -1;
+        if (!isNaN(bn)) return 1;
+        return aName.localeCompare(bName); // fallback to string compare
+      });
+    } else {
+      // Sort by created_at
+      updated.sort((a, b) => {
+        const da = new Date(a.created_at);
+        const db = new Date(b.created_at);
+        return sortOrder === "latest" ? db - da : da - db;
+      });
+    }
 
     setFiltered(updated);
     setCurrentPage(1); // RESET to page 1 on new filter/sort/search
-  }, [search, selectedDept, sortOrder, data]);
+  }, [search, selectedDept, selectedSetupCode, sortOrder, data]);
 
   if (!data || !Array.isArray(data)) {
     return (
@@ -178,6 +236,20 @@ export default function SentinelUsersTable({ data, refreshData }) {
             ))}
           </select>
 
+          {/* SETUP CODE FILTER */}
+          <select
+            className="bg-[#18181b] border border-gray-800 px-3 py-2 rounded-lg text-gray-300 text-sm"
+            value={selectedSetupCode}
+            onChange={(e) => setSelectedSetupCode(e.target.value)}
+          >
+            <option value="All">All Setup Codes</option>
+            {setupCodes.map((code, idx) => (
+              <option key={idx} value={code}>
+                {code}
+              </option>
+            ))}
+          </select>
+
           {/* SORT BUTTON */}
           <button
             onClick={() =>
@@ -202,11 +274,11 @@ export default function SentinelUsersTable({ data, refreshData }) {
               <th className="p-3 font-semibold">Department</th>
               <th className="p-3 font-semibold">Full Name</th>
               <th className="p-3 font-semibold">Setup</th>
-              <th className="p-3 font-semibold">Setup Code</th>
-              <th className="p-3 font-semibold">Appt Code</th>
-              <th className="p-3 font-semibold">Remarks</th>
-              <th className="p-3 font-semibold">IP Address</th>
-              <th className="p-3 font-semibold">Actions</th>
+              <th className="font-semibold text-center w-fit">Setup Code</th>
+              <th className="p-3 font-semibold text-center">Appt Code</th>
+              <th className="p-3 font-semibold text-center">Remarks</th>
+              <th className="p-3 font-semibold text-center">IP Address</th>
+              <th className="p-3 font-semibold text-center">Actions</th>
             </tr>
           </thead>
 
@@ -229,12 +301,12 @@ export default function SentinelUsersTable({ data, refreshData }) {
                   <td className="p-2">{item.dept || "-"}</td>
                   <td className="p-2">{item.fullname || "-"}</td>
                   <td className="p-2">{item.setup || "-"}</td>
-                  <td className="p-2">{item.setupcode || "-"}</td>
-                  <td className="p-2">{item.apptcode || "-"}</td>
-                  <td className="p-2">{item.remarks || "-"}</td>
-                  <td className="p-2">{item.ip_address || "-"}</td>
+                  <td className="p-2 text-center">{item.setupcode || "-"}</td>
+                  <td className="p-2 text-center">{item.apptcode || "-"}</td>
+                  <td className="p-2 text-center">{item.remarks || "-"}</td>
+                  <td className="p-2 text-center">{item.ip_address || "-"}</td>
                   <td className="p-2">
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 justify-center">
                       <button
                         onClick={() => openEdit(item)}
                         title="Edit"

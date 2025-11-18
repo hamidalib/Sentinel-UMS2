@@ -5,7 +5,7 @@ import { pool, sql } from "../config/db.js";
 /**
  * POST /api/records/import
  * Expects file in req.file (multer memoryStorage)
- * CSV columns expected:
+ * CSV columns expected (variants allowed):
  * username,password,dept,fullname,setup,setupcode,apptcode,remarks,ip_address
  */
 export const importRecords = async (req, res) => {
@@ -32,71 +32,100 @@ export const importRecords = async (req, res) => {
     const successRows = [];
     const failedRows = [];
 
-    // Use transaction for safer inserts
-    const tx = new sql.Transaction(pool);
-    await tx.begin();
-    try {
-      const request = tx.request();
+    // Helper: sanitize strings (remove null/control bytes, trim, truncate)
+    const sanitize = (v, maxLen) => {
+      if (v === null || typeof v === "undefined") return "";
+      let s = String(v);
+      // Remove null bytes and non-printable control characters that can break TDS
+      s = s
+        .replace(/\0/g, "")
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, " ")
+        .trim();
+      if (typeof maxLen === "number" && s.length > maxLen)
+        s = s.slice(0, maxLen);
+      return s;
+    };
 
-      // Prepare a parameterised insert statement once (named parameters used per-row)
-      // We'll perform row-by-row inserts (fine for small/medium CSV). For large CSVs, implement bulk/batched inserts.
-      for (let i = 0; i < records.length; i++) {
-        const row = records[i];
+    // Insert rows individually so one failing row doesn't abort the entire import.
+    for (let i = 0; i < records.length; i++) {
+      const row = records[i];
 
-        // Accept every row: coerce missing fields to safe defaults so DB non-null
-        // constraints are not tripped. Use empty string for text fields by default.
-        const username = (row.username || row.user || row.Username || "").toString();
-        const dept = (row.dept || row.department || row.Dept || "").toString();
-        const fullname = (row.fullname || row.full_name || row.FullName || "").toString();
-        const password = (row.password || "").toString();
-        const setup = (row.setup || "").toString();
-        const setupcode = (row.setupcode || "").toString();
-        const apptcode = (row.apptcode || "").toString();
-        const remarks = (row.remarks || "").toString();
-        const ip_address = (row.ip_address || "").toString();
+      // Normalize header keys so we accept variations like "Appt Code", "appt_code", "ApptCode", etc.
+      const normalized = {};
+      Object.keys(row || {}).forEach((k) => {
+        if (!k) return;
+        const key = k
+          .toString()
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "");
+        normalized[key] = row[k];
+      });
 
-        // Set inputs (using new request for each row to avoid parameter bleed)
-        const r = tx.request();
-        r.input("username", sql.NVarChar(50), username);
-        // default password to empty string rather than NULL to avoid NOT NULL errors
-        r.input("password", sql.NVarChar(255), password);
-        r.input("dept", sql.NVarChar(100), dept);
-        r.input("fullname", sql.NVarChar(100), fullname);
-        r.input("setup", sql.NVarChar(100), setup);
-        r.input("setupcode", sql.NVarChar(50), setupcode);
-        r.input("apptcode", sql.NVarChar(50), apptcode);
-        r.input("remarks", sql.NVarChar(sql.MAX), remarks);
-        r.input("ip_address", sql.NVarChar(45), ip_address);
+      const get = (...names) => {
+        for (const n of names) {
+          const key = n
+            .toString()
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, "");
+          if (
+            typeof normalized[key] !== "undefined" &&
+            normalized[key] !== null
+          )
+            return normalized[key];
+          if (typeof row[n] !== "undefined" && row[n] !== null) return row[n];
+        }
+        return "";
+      };
 
-        try {
-          await r.query(
-            `INSERT INTO Records
+      // Sanitize and truncate to match DB column sizes. IPs typically fit within 45 chars (IPv6),
+      // apptcode 50, username 50, dept 100, fullname 100, password 255.
+      const username = sanitize(get("username", "user"), 50);
+      const dept = sanitize(get("dept", "department"), 100);
+      const fullname = sanitize(get("fullname", "full_name", "full name"), 100);
+      const password = sanitize(get("password"), 255);
+      const setup = sanitize(get("setup"), 100);
+      const setupcode = sanitize(
+        get("setupcode", "setup_code", "setup code"),
+        50
+      );
+      const apptcode = sanitize(
+        get("apptcode", "appt_code", "appt code", "apptcode"),
+        50
+      );
+      const remarks = sanitize(get("remarks"));
+      const ip_address = sanitize(
+        get("ip_address", "ip address", "ip", "ipaddress"),
+        45
+      );
+
+      const r = pool.request();
+      r.input("username", sql.NVarChar(50), username);
+      r.input("password", sql.NVarChar(255), password);
+      r.input("dept", sql.NVarChar(100), dept);
+      r.input("fullname", sql.NVarChar(100), fullname);
+      r.input("setup", sql.NVarChar(100), setup);
+      r.input("setupcode", sql.NVarChar(50), setupcode);
+      r.input("apptcode", sql.NVarChar(50), apptcode);
+      r.input("remarks", sql.NVarChar(sql.MAX), remarks);
+      r.input("ip_address", sql.NVarChar(45), ip_address);
+
+      try {
+        await r.query(
+          `INSERT INTO Records
               (username, password, dept, fullname, setup, setupcode, apptcode, remarks, ip_address, created_at)
              VALUES
               (@username, @password, @dept, @fullname, @setup, @setupcode, @apptcode, @remarks, @ip_address, GETDATE())`
-          );
-          successRows.push({ rowNumber: i + 1, username });
-        } catch (rowErr) {
-          failedRows.push({
-            rowNumber: i + 1,
-            row,
-            reason: rowErr?.message || "DB insert error",
-          });
-        }
-      }
-
-      // commit transaction
-      await tx.commit();
-    } catch (txErr) {
-      // rollback on transaction-level error
-      await tx.rollback();
-      console.error("Transaction failed:", txErr);
-      return res
-        .status(500)
-        .json({
-          error: "Import failed (transaction error)",
-          details: txErr.message,
+        );
+        successRows.push({ rowNumber: i + 1, username });
+      } catch (rowErr) {
+        // Log detailed row error to aid debugging
+        console.error(`Row ${i + 1} insert failed:`, rowErr?.message || rowErr);
+        failedRows.push({
+          rowNumber: i + 1,
+          row,
+          reason: rowErr?.message || "DB insert error",
         });
+      }
     }
 
     return res.json({
