@@ -4,6 +4,7 @@ import cors from "cors";
 import { connectDB } from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
 import recordRoutes from "./routes/recordRoutes.js";
+import logRoutes from "./routes/logRoutes.js";
 
 dotenv.config();
 
@@ -29,6 +30,7 @@ app.use("/api/records", recordRoutes);
 app.use("/api/users", authRoutes);
 // Also keep /api/auth for backward compatibility if needed
 app.use("/api/auth", authRoutes);
+app.use("/api/logs", logRoutes);
 
 // Connect Database and start server
 const startServer = async () => {

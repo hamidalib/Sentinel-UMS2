@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from "react";
-import { Search, ArrowUpDown, Edit, Trash } from "lucide-react";
+import { Plus, Search, ArrowUpDown, Edit, Trash, Key } from "lucide-react";
 
 export default function AdminUsersTable({ data, refreshData }) {
   const [filtered, setFiltered] = useState([]);
   const [search, setSearch] = useState("");
   const [sortOrder, setSortOrder] = useState("latest");
   const [editingItem, setEditingItem] = useState(null);
+  const [changePwdItem, setChangePwdItem] = useState(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [pwdMessage, setPwdMessage] = useState("");
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -135,6 +139,15 @@ export default function AdminUsersTable({ data, refreshData }) {
             <ArrowUpDown className="w-4 h-4 mr-2" />
             {sortOrder === "latest" ? "Latest First" : "Oldest First"}
           </button>
+
+          <button
+            onClick={() =>
+              window.dispatchEvent(new Event("openCreateAdminModal"))
+            }
+            className="flex justify-center items-center bg-[#001D3D] border-none hover:bg-blue-900 cursor-pointer px-3 rounded-lg text-white text-sm"
+          >
+            Create Admin <Plus className="w-4 h-4 ml-1" />
+          </button>
         </div>
       </div>
 
@@ -174,6 +187,13 @@ export default function AdminUsersTable({ data, refreshData }) {
                   </td>
                   <td className="p-2">
                     <div className="flex gap-2 justify-center">
+                      <button
+                        onClick={() => setChangePwdItem({ ...item })}
+                        title="Change Password"
+                        className="p-2 rounded hover:bg-gray-800/60"
+                      >
+                        <Key className="w-4 h-4 text-yellow-300" />
+                      </button>
                       <button
                         onClick={() => openEdit(item)}
                         title="Edit"
@@ -251,6 +271,105 @@ export default function AdminUsersTable({ data, refreshData }) {
                 className="px-4 py-2 bg-blue-600 rounded text-sm text-white"
               >
                 Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Change Password Modal */}
+      {changePwdItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="w-full max-w-md bg-[#0C0E12] border border-gray-800 rounded-lg p-6">
+            <h3 className="text-lg font-semibold mb-4">Change Password</h3>
+            <p className="text-sm text-gray-400 mb-3">
+              Change password for <strong>{changePwdItem.username}</strong>
+            </p>
+            <div className="grid grid-cols-1 gap-3">
+              <div>
+                <label className="text-sm text-gray-400 mb-1 block">
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  className="w-full bg-[#18181b] border border-gray-800 p-2 rounded text-sm text-gray-200"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="New password"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm text-gray-400 mb-1 block">
+                  Confirm Password
+                </label>
+                <input
+                  type="password"
+                  className="w-full bg-[#18181b] border border-gray-800 p-2 rounded text-sm text-gray-200"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm password"
+                />
+              </div>
+
+              {pwdMessage && (
+                <div className="text-sm text-red-400">{pwdMessage}</div>
+              )}
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setChangePwdItem(null);
+                  setNewPassword("");
+                  setConfirmPassword("");
+                  setPwdMessage("");
+                }}
+                className="px-4 py-2 bg-[#18181b] border border-gray-800 rounded text-sm text-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  setPwdMessage("");
+                  if (!newPassword) {
+                    setPwdMessage("Password cannot be empty");
+                    return;
+                  }
+                  if (newPassword !== confirmPassword) {
+                    setPwdMessage("Passwords do not match");
+                    return;
+                  }
+
+                  try {
+                    const token = localStorage.getItem("token");
+                    const res = await fetch(
+                      `http://localhost:5000/api/users/${changePwdItem.id}`,
+                      {
+                        method: "PUT",
+                        headers: {
+                          Authorization: `Bearer ${token}`,
+                          "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({ password: newPassword }),
+                      }
+                    );
+
+                    if (!res.ok) throw new Error("Password update failed");
+                    // success
+                    setChangePwdItem(null);
+                    setNewPassword("");
+                    setConfirmPassword("");
+                    if (typeof refreshData === "function") await refreshData();
+                    alert("Password updated successfully");
+                  } catch (err) {
+                    console.error("Failed to change password:", err);
+                    setPwdMessage("Failed to update password");
+                  }
+                }}
+                className="px-4 py-2 bg-blue-600 rounded text-sm text-white"
+              >
+                Change
               </button>
             </div>
           </div>

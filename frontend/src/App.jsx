@@ -9,7 +9,7 @@ import Login from "./pages/Login.jsx";
 import DashboardLayout from "./pages/DashboardLayout.jsx";
 import SentinelUsers from "./pages/SentinelUsers.jsx";
 import AdminUsers from "./pages/AdminUsers.jsx";
-import Settings from "./pages/Settings.jsx";
+import Logs from "./pages/Logs.jsx";
 
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem("token"));
@@ -113,10 +113,10 @@ function App() {
           element={<Navigate to="/dashboard/sentinel-users" replace />}
         />
 
-        <Route path="/dashboard" element={<DashboardLayout />}>
+        <Route path="/dashboard" element={<DashboardLayout />} >
           <Route path="sentinel-users" element={<SentinelUsers />} />
           <Route path="admin-users" element={<AdminUsers />} />
-          <Route path="settings" element={<Settings />} />
+          <Route path="logs" element={<Logs />} />
         </Route>
 
         {/* Redirect unknown */}

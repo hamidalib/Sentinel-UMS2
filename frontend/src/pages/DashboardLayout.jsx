@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Outlet } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import AddSentinelUserModal from "../components/ui/AddSentinelUserModal";
@@ -10,12 +10,17 @@ export default function DashboardLayout() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showAddAdminModal, setShowAddAdminModal] = useState(false);
 
+  useEffect(() => {
+    const handler = () => setShowAddAdminModal(true);
+    window.addEventListener("openCreateAdminModal", handler);
+    return () => window.removeEventListener("openCreateAdminModal", handler);
+  }, []);
+
   return (
     <div className="flex h-screen bg-[#1a1a1a] text-white">
       <Sidebar
         onAddUserClick={() => setShowAddModal(true)}
         onImportClick={() => setShowImportModal(true)}
-        onCreateAdminClick={() => setShowAddAdminModal(true)}
       />
 
       {/* Content area where pages load */}

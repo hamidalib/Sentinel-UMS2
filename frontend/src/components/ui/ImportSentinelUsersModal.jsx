@@ -2,6 +2,7 @@
 import React, { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import Papa from "papaparse";
+import { X } from "lucide-react";
 
 export default function ImportSentinelUsersModal({ open, onClose }) {
   if (!open) return null;
@@ -13,6 +14,8 @@ export default function ImportSentinelUsersModal({ open, onClose }) {
   const [previewRows, setPreviewRows] = useState([]);
   const [headerRow, setHeaderRow] = useState([]);
   const [fileError, setFileError] = useState(null);
+  const [previewResult, setPreviewResult] = useState(null);
+  const [confirming, setConfirming] = useState(false);
 
   const onDrop = useCallback((acceptedFiles, rejectedFiles) => {
     setFileError(null);
@@ -76,18 +79,87 @@ export default function ImportSentinelUsersModal({ open, onClose }) {
     setFileError(null);
 
     try {
+      // First call preview endpoint to detect duplicates / missing usernames
+      setPreviewResult(null);
+      setConfirming(false);
       const form = new FormData();
       form.append("file", file);
 
+      const token = localStorage.getItem("token");
+      const previewRes = await fetch(
+        "http://localhost:5000/api/records/import/preview",
+        {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: form,
+        }
+      );
+
+      const previewData = await previewRes.json();
+      if (!previewRes.ok) {
+        setStatus(previewData.error || "Preview failed");
+        setLoading(false);
+        return;
+      }
+
+      // If there are duplicates or missing username rows, ask user to confirm
+      if (
+        (previewData.duplicates && previewData.duplicates.length > 0) ||
+        (previewData.missingUsername && previewData.missingUsername.length > 0)
+      ) {
+        setPreviewResult(previewData);
+        setConfirming(true);
+        setStatus(
+          `Preview found ${previewData.duplicates.length} duplicate(s), ${previewData.missingUsername.length} invalid row(s).`
+        );
+        setLoading(false);
+        return;
+      }
+
+      // No duplicates/missing, proceed to actual import
+      const importRes = await fetch(
+        "http://localhost:5000/api/records/import",
+        {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: form,
+        }
+      );
+      const data = await importRes.json();
+
+      if (!importRes.ok) {
+        setStatus(data.error || "Import failed");
+        setSummary(data);
+      } else {
+        setStatus(`Imported: ${data.success}, Failed: ${data.failed}`);
+        setSummary(data);
+        window.dispatchEvent(
+          new CustomEvent("recordsImported", { detail: data })
+        );
+        setTimeout(() => onClose(), 900);
+      }
+    } catch (err) {
+      console.error("Upload/preview error:", err);
+      setStatus("Upload failed (network/server).");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const continueImport = async () => {
+    if (!file) return;
+    setLoading(true);
+    setStatus(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
       const token = localStorage.getItem("token");
       const res = await fetch("http://localhost:5000/api/records/import", {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: form,
       });
-
       const data = await res.json();
-
       if (!res.ok) {
         setStatus(data.error || "Import failed");
         setSummary(data);
@@ -97,14 +169,15 @@ export default function ImportSentinelUsersModal({ open, onClose }) {
         window.dispatchEvent(
           new CustomEvent("recordsImported", { detail: data })
         );
-        // optional close after short delay:
         setTimeout(() => onClose(), 900);
       }
     } catch (err) {
-      console.error("Upload error:", err);
-      setStatus("Upload failed (network/server).");
+      console.error("Continue import error:", err);
+      setStatus("Import failed (network/server).");
     } finally {
       setLoading(false);
+      setConfirming(false);
+      setPreviewResult(null);
     }
   };
 
@@ -123,7 +196,7 @@ export default function ImportSentinelUsersModal({ open, onClose }) {
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold">Import Sentinel Users (CSV)</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-white">
-            Close
+            <X className="cursor-pointer" />
           </button>
         </div>
 
@@ -137,7 +210,7 @@ export default function ImportSentinelUsersModal({ open, onClose }) {
         {/* Dropzone */}
         <div
           {...getRootProps()}
-          className={`border-dashed border-2 rounded p-4 text-center mb-3 cursor-pointer ${
+          className={`border-dashed border-2 hover:border-white/40 transition-all duration-300 rounded p-12 text-center mb-3 cursor-pointer ${
             isDragActive
               ? "border-blue-500 bg-[#0b1220]"
               : "border-gray-700 bg-transparent"
@@ -210,6 +283,7 @@ export default function ImportSentinelUsersModal({ open, onClose }) {
           </div>
         )}
 
+        {/* Action buttons: either confirm duplicates or start preview/import */}
         <div className="flex gap-3 justify-end">
           <button
             onClick={onClose}
@@ -218,14 +292,89 @@ export default function ImportSentinelUsersModal({ open, onClose }) {
           >
             Cancel
           </button>
-          <button
-            onClick={upload}
-            className="px-4 py-2 rounded bg-blue-600 text-white"
-            disabled={loading || !file}
-          >
-            {loading ? "Uploading..." : "Upload & Import"}
-          </button>
+
+          {confirming && previewResult ? (
+            <>
+              <button
+                onClick={() => {
+                  // cancel confirming and allow user to modify file
+                  setConfirming(false);
+                  setPreviewResult(null);
+                  setStatus(null);
+                }}
+                className="px-4 py-2 rounded bg-yellow-600 text-white"
+                disabled={loading}
+              >
+                Don't Import Duplicates
+              </button>
+              <button
+                onClick={continueImport}
+                className="px-4 py-2 rounded bg-blue-600 text-white"
+                disabled={loading}
+              >
+                {loading
+                  ? "Importing..."
+                  : `Continue Import (${previewResult.insertable} rows)`}
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={upload}
+              className="px-4 py-2 rounded bg-blue-600 text-white"
+              disabled={loading || !file}
+            >
+              {loading ? "Uploading..." : "Upload & Import"}
+            </button>
+          )}
         </div>
+
+        {/* If preview found duplicates or missing rows, show details */}
+        {confirming && previewResult && (
+          <div className="mt-3 text-sm text-yellow-200 bg-[#0b0b0b] border border-gray-800 rounded p-3">
+            <div className="font-medium mb-2">Preview results</div>
+            <div>Total rows: {previewResult.totalRows}</div>
+            <div>Insertable rows: {previewResult.insertable}</div>
+            {previewResult.duplicates &&
+              previewResult.duplicates.length > 0 && (
+                <div className="mt-2">
+                  <div className="font-semibold">Existing usernames in DB:</div>
+                  <ul className="list-disc ml-5">
+                    {previewResult.duplicates.slice(0, 10).map((d, i) => (
+                      <li key={i}>
+                        Row {d.rowNumber}: {d.username}
+                        {d.reason ? ` — ${d.reason}` : ""}
+                      </li>
+                    ))}
+                    {previewResult.duplicates.length > 10 && (
+                      <li>...and more</li>
+                    )}
+                  </ul>
+                </div>
+              )}
+            {previewResult.missingUsername &&
+              previewResult.missingUsername.length > 0 && (
+                <div className="mt-2">
+                  <div className="font-semibold">
+                    Rows with missing username:
+                  </div>
+                  <ul className="list-disc ml-5">
+                    {previewResult.missingUsername.slice(0, 10).map((d, i) => (
+                      <li key={i}>
+                        Row {d.rowNumber}: {d.reason}
+                      </li>
+                    ))}
+                    {previewResult.missingUsername.length > 10 && (
+                      <li>...and more</li>
+                    )}
+                  </ul>
+                </div>
+              )}
+            <div className="mt-3 text-xs text-gray-300">
+              You can continue to import only the non-duplicate rows, or cancel
+              to modify the CSV.
+            </div>
+          </div>
+        )}
 
         {status && <p className="mt-3 text-sm text-gray-300">{status}</p>}
 

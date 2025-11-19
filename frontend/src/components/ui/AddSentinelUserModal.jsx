@@ -111,7 +111,7 @@ export default function AddSentinelUserModal({ open, onClose }) {
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-semibold">Add Sentinel User</h2>
           <button onClick={onClose}>
-            <X className="w-6 h-6 text-gray-400 hover:text-gray-200" />
+            <X className="w-6 h-6 text-gray-400 hover:text-gray-200 cursor-pointer" />
           </button>
         </div>
 
@@ -212,7 +212,7 @@ export default function AddSentinelUserModal({ open, onClose }) {
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-700 rounded-lg text-gray-300 hover:bg-gray-800"
+              className="px-4 py-2 border border-gray-700 rounded-lg text-gray-300 hover:bg-gray-800 cursor-pointer"
             >
               Cancel
             </button>
@@ -220,7 +220,7 @@ export default function AddSentinelUserModal({ open, onClose }) {
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-40"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-40 cursor-pointer"
             >
               {loading ? "Saving..." : "Add User"}
             </button>

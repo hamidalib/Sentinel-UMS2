@@ -56,6 +56,42 @@ export const connectDB = async () => {
 
     // Connect and store pool
     pool = await sql.connect(dbConfig);
+    // Ensure AuditLogs table exists (idempotent)
+    try {
+      const createAuditSql = `
+        IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[AuditLogs]') AND type in (N'U'))
+        BEGIN
+          CREATE TABLE [dbo].[AuditLogs] (
+            [id] INT IDENTITY(1,1) PRIMARY KEY,
+            [created_at] DATETIME NOT NULL DEFAULT GETDATE(),
+            [actor_id] INT NULL,
+            [actor_username] NVARCHAR(50) NULL,
+            [actor_role] NVARCHAR(50) NULL,
+            [action_type] NVARCHAR(100) NOT NULL,
+            [target_type] NVARCHAR(100) NULL,
+            [target_id] INT NULL,
+            [summary] NVARCHAR(255) NULL,
+            [details] NVARCHAR(MAX) NULL,
+            [ip_address] NVARCHAR(45) NULL,
+            [user_agent] NVARCHAR(255) NULL
+          );
+        END
+        IF NOT EXISTS (
+          SELECT * FROM sys.indexes i
+          WHERE i.name = 'IX_AuditLogs_created_at' AND i.object_id = OBJECT_ID(N'[dbo].[AuditLogs]')
+        )
+        BEGIN
+          CREATE INDEX IX_AuditLogs_created_at ON [dbo].[AuditLogs]([created_at] DESC);
+        END`;
+
+      await pool.request().query(createAuditSql);
+      console.log("AuditLogs table exists or was created");
+    } catch (ddlErr) {
+      console.warn(
+        "Could not ensure AuditLogs table exists:",
+        ddlErr.message || ddlErr
+      );
+    }
     console.log("✅ Connected to SQL Server successfully");
   } catch (err) {
     console.error("❌ Database connection failed:", err.message);

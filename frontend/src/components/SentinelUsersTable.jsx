@@ -1,14 +1,21 @@
 import React, { useEffect, useState } from "react";
-import { Search, ArrowUpDown, Edit, Trash } from "lucide-react";
+import { Search, ArrowUpDown, Edit, Trash, Download } from "lucide-react";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "./lightswind/select";
 
 export default function SentinelUsersTable({ data, refreshData }) {
   const [filtered, setFiltered] = useState([]);
   const [search, setSearch] = useState("");
   const [sortOrder, setSortOrder] = useState("latest");
   const [departments, setDepartments] = useState([]);
-  const [selectedDept, setSelectedDept] = useState("All");
+  const [selectedDept, setSelectedDept] = useState("");
   const [setupCodes, setSetupCodes] = useState([]);
-  const [selectedSetupCode, setSelectedSetupCode] = useState("All");
+  const [selectedSetupCode, setSelectedSetupCode] = useState("");
   const [editingItem, setEditingItem] = useState(null);
 
   // Pagination State
@@ -62,13 +69,13 @@ export default function SentinelUsersTable({ data, refreshData }) {
       );
     }
 
-    // Department filter
-    if (selectedDept !== "All") {
+    // Department filter: only apply when a value is selected (non-empty)
+    if (selectedDept) {
       updated = updated.filter((row) => row.dept === selectedDept);
     }
 
-    // Setup Code filter
-    if (selectedSetupCode !== "All") {
+    // Setup Code filter: only apply when a value is selected (non-empty)
+    if (selectedSetupCode) {
       updated = updated.filter((row) => row.setupcode === selectedSetupCode);
     }
 
@@ -84,8 +91,7 @@ export default function SentinelUsersTable({ data, refreshData }) {
       return NaN;
     };
 
-    const isFilterActive =
-      selectedDept !== "All" || selectedSetupCode !== "All";
+    const isFilterActive = !!(selectedDept || selectedSetupCode);
 
     if (isFilterActive) {
       updated.sort((a, b) => {
@@ -206,7 +212,7 @@ export default function SentinelUsersTable({ data, refreshData }) {
   };
 
   return (
-    <div className="mt-6">
+    <div className="mt-4">
       {/* ----------------------- TOP BAR ----------------------- */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-2 bg-[#0C0E12] p-2 rounded-md">
         <h2 className="text-xl font-bold">Sentinel Users</h2>
@@ -222,33 +228,45 @@ export default function SentinelUsersTable({ data, refreshData }) {
             />
           </div>
 
-          {/* DEPARTMENT FILTER */}
-          <select
-            className="bg-[#18181b] border border-gray-800 px-3 py-2 rounded-lg text-gray-300 text-sm"
-            value={selectedDept}
-            onChange={(e) => setSelectedDept(e.target.value)}
-          >
-            <option value="All">All Departments</option>
-            {departments.map((dept, idx) => (
-              <option key={idx} value={dept}>
-                {dept}
-              </option>
-            ))}
-          </select>
+          {/* DEPARTMENT FILTER (shadcn Select) */}
+          <div className="w-52">
+            <Select
+              value={selectedDept}
+              onValueChange={(v) => setSelectedDept(v)}
+            >
+              <SelectTrigger className="bg-[#18181b] border border-gray-800 px-3 py-2 rounded-lg text-gray-300 text-sm">
+                <SelectValue placeholder="All Departments" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#0C0E12] border border-gray-800 text-gray-300">
+                <SelectItem value="">All Departments</SelectItem>
+                {departments.map((dept, idx) => (
+                  <SelectItem key={idx} value={dept}>
+                    {dept}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-          {/* SETUP CODE FILTER */}
-          <select
-            className="bg-[#18181b] border border-gray-800 px-3 py-2 rounded-lg text-gray-300 text-sm"
-            value={selectedSetupCode}
-            onChange={(e) => setSelectedSetupCode(e.target.value)}
-          >
-            <option value="All">All Setup Codes</option>
-            {setupCodes.map((code, idx) => (
-              <option key={idx} value={code}>
-                {code}
-              </option>
-            ))}
-          </select>
+          {/* SETUP CODE FILTER (shadcn Select) */}
+          <div className="w-40">
+            <Select
+              value={selectedSetupCode}
+              onValueChange={(v) => setSelectedSetupCode(v)}
+            >
+              <SelectTrigger className="bg-[#18181b] border border-gray-800 px-3 py-2 rounded-lg text-gray-300 text-sm">
+                <SelectValue placeholder="All Setup Codes" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#0C0E12] border border-gray-800 text-gray-300">
+                <SelectItem value="">All Setup Codes</SelectItem>
+                {setupCodes.map((code, idx) => (
+                  <SelectItem key={idx} value={code}>
+                    {code}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           {/* SORT BUTTON */}
           <button
@@ -259,6 +277,82 @@ export default function SentinelUsersTable({ data, refreshData }) {
           >
             <ArrowUpDown className="w-4 h-4 mr-2" />
             {sortOrder === "latest" ? "Latest First" : "Oldest First"}
+          </button>
+          {/* EXPORT ALL RECORDS BUTTON */}
+          <button
+            onClick={async () => {
+              try {
+                const token = localStorage.getItem("token");
+                const res = await fetch("http://localhost:5000/api/records", {
+                  headers: {
+                    Authorization: token ? `Bearer ${token}` : undefined,
+                    "Content-Type": "application/json",
+                  },
+                });
+                if (!res.ok) throw new Error("Failed to fetch records");
+                const data = await res.json();
+                const rows = Array.isArray(data.records)
+                  ? data.records
+                  : Array.isArray(data)
+                  ? data
+                  : [];
+
+                if (rows.length === 0) {
+                  alert("No records to export");
+                  return;
+                }
+
+                const cols = [
+                  // "id",
+                  "username",
+                  "dept",
+                  "fullname",
+                  "setup",
+                  "setupcode",
+                  "apptcode",
+                  "remarks",
+                  "ip_address",
+                  "created_at",
+                ];
+
+                const escapeCell = (val) => {
+                  if (val === null || typeof val === "undefined") return "";
+                  const s = String(val);
+                  const escaped = s.replace(/"/g, '""');
+                  if (/[",\n]/.test(s)) return `"${escaped}"`;
+                  return escaped;
+                };
+
+                const header = cols.join(",");
+                const csvRows = rows.map((r) =>
+                  cols.map((c) => escapeCell(r[c])).join(",")
+                );
+                const csv = "\uFEFF" + [header, ...csvRows].join("\n");
+
+                const blob = new Blob([csv], {
+                  type: "text/csv;charset=utf-8;",
+                });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                const now = new Date()
+                  .toISOString()
+                  .slice(0, 19)
+                  .replace(/[:T]/g, "-");
+                a.download = `sentinel-records-${now}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+              } catch (err) {
+                console.error("Export failed:", err);
+                alert("Failed to export records");
+              }
+            }}
+            className="flex items-center bg-[#0b5345] border border-gray-800 px-3 py-2 rounded-lg text-white text-sm"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export All
           </button>
         </div>
       </div>

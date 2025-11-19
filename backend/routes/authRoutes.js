@@ -3,11 +3,12 @@ import bcrypt from "bcryptjs";
 import { pool, sql } from "../config/db.js"; // ✅ Use pool from db.js
 import jwt from "jsonwebtoken"; // ✅ Add JWT for authentication
 import { verifyToken } from "../middleware/authMiddleware.js"; // ✅ Add middleware for authentication
+import { logAction } from "../lib/auditLogger.js";
 
 const router = express.Router();
 
 // POST /api/users/create
-router.post("/create", async (req, res) => {
+router.post("/create", verifyToken, async (req, res) => {
   console.log("Request body received:", req.body);
 
   const { username, password, role } = req.body;
@@ -32,9 +33,37 @@ router.post("/create", async (req, res) => {
     request.input("password_hash", sql.NVarChar(255), hashedPassword);
     request.input("role", sql.NVarChar(50), role);
 
-    await request.query(query);
+    const insertRes = await request.query(
+      `INSERT INTO Users (username, password_hash, role, created_at)
+       OUTPUT INSERTED.id AS id
+       VALUES (@username, @password_hash, @role, GETDATE())`
+    );
+    const insertedId =
+      insertRes.recordset && insertRes.recordset[0]
+        ? insertRes.recordset[0].id
+        : null;
 
-    res.status(201).json({ message: "User created successfully" });
+    // Log creation
+    try {
+      const { logAction } = await import("../lib/auditLogger.js");
+      await logAction({
+        req,
+        actionType: "admin.create",
+        targetType: "User",
+        targetId: insertedId,
+        summary: `username: ${username}`,
+        details: { role },
+      });
+    } catch (e) {
+      console.error(
+        "Failed to write audit log for admin create:",
+        e?.message || e
+      );
+    }
+
+    res
+      .status(201)
+      .json({ message: "User created successfully", id: insertedId });
   } catch (err) {
     console.error("Full error:", err);
 
@@ -125,6 +154,22 @@ router.post("/login", async (req, res) => {
 
     // Check if user exists
     if (result.recordset.length === 0) {
+      // Log failed login attempt (unknown user)
+      try {
+        const { logAction } = await import("../lib/auditLogger.js");
+        await logAction({
+          req,
+          actorUsername: username,
+          actionType: "auth.login",
+          summary: `Login failed for ${username}`,
+          details: { success: false, reason: "user_not_found" },
+        });
+      } catch (e) {
+        console.error(
+          "Failed to write audit log for failed login (user not found):",
+          e?.message || e
+        );
+      }
       return res.status(401).json({ error: "Invalid username or password" });
     }
 
@@ -133,6 +178,23 @@ router.post("/login", async (req, res) => {
     // Compare password
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
+      // Log failed login attempt (bad password)
+      try {
+        const { logAction } = await import("../lib/auditLogger.js");
+        await logAction({
+          req,
+          actorId: user.id,
+          actorUsername: user.username,
+          actionType: "auth.login",
+          summary: `Login failed for ${user.username}`,
+          details: { success: false, reason: "bad_password" },
+        });
+      } catch (e) {
+        console.error(
+          "Failed to write audit log for failed login (bad password):",
+          e?.message || e
+        );
+      }
       return res.status(401).json({ error: "Invalid username or password" });
     }
 
@@ -146,6 +208,20 @@ router.post("/login", async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: "1h" } // token valid for 1 hour
     );
+
+    // Log successful login
+    try {
+      const { logAction } = await import("../lib/auditLogger.js");
+      await logAction({
+        req,
+        actorId: user.id,
+        actionType: "auth.login",
+        summary: `Login successful for ${user.username}`,
+        details: { success: true },
+      });
+    } catch (e) {
+      console.error("Failed to write audit log for login:", e?.message || e);
+    }
 
     res.json({
       message: "Login successful",
@@ -183,16 +259,20 @@ router.put("/:id", verifyToken, async (req, res) => {
   const { username, password, role } = req.body;
 
   try {
-    // Fetch existing user to preserve password if not provided
+    // Fetch existing user to preserve fields if not provided
     const existingReq = pool.request();
     existingReq.input("id", sql.Int, id);
     const existingRes = await existingReq.query(
-      "SELECT password_hash FROM Users WHERE id = @id"
+      "SELECT username, password_hash, role FROM Users WHERE id = @id"
     );
-    const existingHash =
+    const existing =
       existingRes.recordset && existingRes.recordset[0]
-        ? existingRes.recordset[0].password_hash
+        ? existingRes.recordset[0]
         : null;
+
+    const existingHash = existing ? existing.password_hash : null;
+    const existingUsername = existing ? existing.username : null;
+    const existingRole = existing ? existing.role : null;
 
     let passwordHash = existingHash;
     if (
@@ -205,9 +285,22 @@ router.put("/:id", verifyToken, async (req, res) => {
 
     const request = pool.request();
     request.input("id", sql.Int, id);
-    request.input("username", sql.NVarChar(50), username || null);
+    // Preserve username/role if not provided to avoid writing NULL into NOT NULL columns
+    request.input(
+      "username",
+      sql.NVarChar(50),
+      typeof username !== "undefined" && username !== null && username !== ""
+        ? username
+        : existingUsername
+    );
     request.input("password_hash", sql.NVarChar(255), passwordHash || null);
-    request.input("role", sql.NVarChar(50), role || null);
+    request.input(
+      "role",
+      sql.NVarChar(50),
+      typeof role !== "undefined" && role !== null && role !== ""
+        ? role
+        : existingRole
+    );
 
     const updateQuery = `
       UPDATE Users
@@ -221,7 +314,10 @@ router.put("/:id", verifyToken, async (req, res) => {
     return res.json({ message: "User updated" });
   } catch (err) {
     console.error("Error updating user:", err);
-    return res.status(500).json({ error: "Failed to update user" });
+    return res.status(500).json({
+      error: "Failed to update user",
+      details: process.env.NODE_ENV === "development" ? err.message : undefined,
+    });
   }
 });
 
@@ -229,9 +325,37 @@ router.put("/:id", verifyToken, async (req, res) => {
 router.delete("/:id", verifyToken, async (req, res) => {
   const { id } = req.params;
   try {
+    // Fetch existing user for logging
+    const selReq = pool.request();
+    selReq.input("id", sql.Int, id);
+    const selRes = await selReq.query(
+      "SELECT id, username, role FROM Users WHERE id = @id"
+    );
+    const existing =
+      selRes.recordset && selRes.recordset[0] ? selRes.recordset[0] : null;
+
+    if (!existing) return res.status(404).json({ error: "User not found" });
+
     const request = pool.request();
     request.input("id", sql.Int, id);
     await request.query("DELETE FROM Users WHERE id = @id");
+
+    try {
+      await logAction({
+        req,
+        actionType: "admin.delete",
+        targetType: "User",
+        targetId: parseInt(id, 10),
+        summary: `Deleted admin ${existing.username}`,
+        details: { username: existing.username, role: existing.role },
+      });
+    } catch (e) {
+      console.error(
+        "Failed to write audit log for admin delete:",
+        e?.message || e
+      );
+    }
+
     return res.json({ message: "User deleted" });
   } catch (err) {
     console.error("Error deleting user:", err);
