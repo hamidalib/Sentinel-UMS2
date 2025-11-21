@@ -156,7 +156,7 @@ export const importRecords = async (req, res) => {
           `INSERT INTO Records
               (username, password, dept, fullname, setup, setupcode, apptcode, remarks, ip_address, created_at)
              VALUES
-              (@username, @password, @dept, @fullname, @setup, @setupcode, @apptcode, @remarks, @ip_address, GETDATE())`
+              (@username, @password, @dept, @fullname, @setup, @setupcode, @apptcode, @remarks, @ip_address, SYSUTCDATETIME())`
         );
         successRows.push({ rowNumber: i + 1, username });
         // add to existingUsernames so subsequent rows can't insert same username

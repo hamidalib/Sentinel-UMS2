@@ -76,12 +76,10 @@ router.get("/", verifyToken, async (req, res) => {
     if (err && err.stack) console.error(err.stack);
     // In development include error details to help debugging
     if (process.env.NODE_ENV === "development") {
-      return res
-        .status(500)
-        .json({
-          error: "Internal server error",
-          details: err.message || String(err),
-        });
+      return res.status(500).json({
+        error: "Internal server error",
+        details: err.message || String(err),
+      });
     }
     return res.status(500).json({ error: "Internal server error" });
   }

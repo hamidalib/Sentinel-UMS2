@@ -36,7 +36,7 @@ router.post("/create", verifyToken, async (req, res) => {
     const insertRes = await request.query(
       `INSERT INTO Users (username, password_hash, role, created_at)
        OUTPUT INSERTED.id AS id
-       VALUES (@username, @password_hash, @role, GETDATE())`
+       VALUES (@username, @password_hash, @role, SYSUTCDATETIME())`
     );
     const insertedId =
       insertRes.recordset && insertRes.recordset[0]
@@ -136,7 +136,17 @@ router.get("/count", verifyToken, async (req, res) => {
 // Logs in a user and returns a JWT token
 
 router.post("/login", async (req, res) => {
-  const { username, password } = req.body;
+  // Be defensive: ensure a JSON body was provided
+  if (!req.body || typeof req.body !== "object") {
+    return res
+      .status(400)
+      .json({
+        error:
+          "Request body missing or invalid. Send JSON { username, password }",
+      });
+  }
+
+  const { username, password } = req.body || {};
 
   if (!username || !password) {
     return res

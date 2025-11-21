@@ -56,7 +56,7 @@ router.post("/create", verifyToken, async (req, res) => {
     const insertRes = await request.query(
       `INSERT INTO Records (username, password, dept, fullname, setup, setupcode, apptcode, remarks, ip_address, created_at)
        OUTPUT INSERTED.id AS id
-       VALUES (@username, @password, @dept, @fullname, @setup, @setupcode, @apptcode, @remarks, @ip_address, GETDATE())`
+       VALUES (@username, @password, @dept, @fullname, @setup, @setupcode, @apptcode, @remarks, @ip_address, SYSUTCDATETIME())`
     );
 
     const insertedId =
@@ -130,7 +130,7 @@ router.get("/", verifyToken, async (req, res) => {
     const newUsersResult = await pool
       .request()
       .query(
-        "SELECT COUNT(*) AS newUsersLast7Days FROM Records WHERE created_at >= DATEADD(day, -7, GETDATE())"
+        "SELECT COUNT(*) AS newUsersLast7Days FROM Records WHERE created_at >= DATEADD(day, -7, SYSUTCDATETIME())"
       );
 
     res.json({

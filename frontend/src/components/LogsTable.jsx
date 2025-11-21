@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { fetchLogs } from "../lib/api/logs";
+import { Popover, PopoverTrigger, PopoverContent } from "./ui/popover";
+import { Calendar } from "./ui/calendar";
 
 export default function LogsTable() {
   const [logs, setLogs] = useState([]);
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(20);
+  const [pageSize] = useState(10);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -15,6 +17,17 @@ export default function LogsTable() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [search, setSearch] = useState("");
+
+  const formatISODate = (d) => {
+    if (!d) return "";
+    try {
+      const dt = d instanceof Date ? d : new Date(d);
+      if (isNaN(dt.getTime())) return "";
+      return dt.toISOString().slice(0, 10);
+    } catch (e) {
+      return "";
+    }
+  };
 
   const load = async (opts = {}) => {
     setLoading(true);
@@ -36,7 +49,12 @@ export default function LogsTable() {
       setPage(resp.page || page);
     } catch (err) {
       console.error("Failed to load logs", err);
-      setError(err.message || "Failed to fetch logs");
+      // normalize error shape from fetch/our client
+      const msg =
+        err && (err.message || (err.body && String(err.body)))
+          ? err.message || String(err.body)
+          : "Failed to fetch logs";
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -53,71 +71,6 @@ export default function LogsTable() {
 
   return (
     <div>
-      <div className="flex flex-col md:flex-row md:items-end md:gap-3 mb-4">
-        <div className="flex gap-2 items-center">
-          <input
-            placeholder="Action (e.g. sentinel.create)"
-            value={actionFilter}
-            onChange={(e) => setActionFilter(e.target.value)}
-            className="bg-[#18181b] border border-gray-800 p-2 rounded text-sm text-gray-200"
-          />
-          <input
-            placeholder="Actor username or id"
-            value={actorFilter}
-            onChange={(e) => setActorFilter(e.target.value)}
-            className="bg-[#18181b] border border-gray-800 p-2 rounded text-sm text-gray-200"
-          />
-          <input
-            type="date"
-            value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
-            className="bg-[#18181b] border border-gray-800 p-2 rounded text-sm text-gray-200"
-          />
-          <input
-            type="date"
-            value={toDate}
-            onChange={(e) => setToDate(e.target.value)}
-            className="bg-[#18181b] border border-gray-800 p-2 rounded text-sm text-gray-200"
-          />
-        </div>
-
-        <div className="flex gap-2 mt-2 md:mt-0 ml-auto">
-          <input
-            placeholder="Search summary or details"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="bg-[#18181b] border border-gray-800 p-2 rounded text-sm text-gray-200 w-56"
-          />
-          <button
-            onClick={() => handleSearch()}
-            className="px-3 py-2 bg-blue-600 rounded text-white text-sm"
-          >
-            Search
-          </button>
-          <button
-            onClick={() =>
-              load({
-                page: 1,
-                action: "",
-                actor: "",
-                from: "",
-                to: "",
-                search: "",
-              })
-            }
-            className="px-3 py-2 bg-gray-700 rounded text-gray-200 text-sm"
-          >
-            Clear
-          </button>
-          <button
-            onClick={() => load({ page })}
-            className="px-3 py-2 bg-[#0b5345] rounded text-white text-sm"
-          >
-            Refresh
-          </button>
-        </div>
-      </div>
-
       <div className="bg-[#0C0E12] border border-gray-800 rounded-xl overflow-x-auto">
         {loading ? (
           <div className="p-6 text-gray-400">Loading logs...</div>
@@ -129,6 +82,7 @@ export default function LogsTable() {
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-[#171b20] text-left text-gray-300">
+                <th className="p-3">SN</th>
                 <th className="p-3">Time</th>
                 <th className="p-3">Actor</th>
                 <th className="p-3">Action</th>
@@ -138,38 +92,75 @@ export default function LogsTable() {
               </tr>
             </thead>
             <tbody>
-              {logs.map((l, idx) => (
-                <tr
-                  key={l.id || idx}
-                  className="border-b border-gray-800 hover:bg-gray-800/30 text-gray-300"
-                >
-                  <td className="p-2 text-sm">
-                    {new Date(l.created_at).toLocaleString()}
-                  </td>
-                  <td className="p-2 text-sm">
-                    {l.actor_username || l.actor || l.actor_id || "-"}
-                  </td>
-                  <td className="p-2 text-sm">{l.action_type}</td>
-                  <td className="p-2 text-sm">
-                    {l.target_type
-                      ? `${l.target_type}${
-                          l.target_id ? ` (${l.target_id})` : ""
-                        }`
-                      : "-"}
-                  </td>
-                  <td className="p-2 text-sm">{l.summary || "-"}</td>
-                  <td className="p-2 text-sm">
-                    <details className="text-xs text-gray-400">
-                      <summary className="cursor-pointer">View</summary>
-                      <pre className="whitespace-pre-wrap p-2 text-xs">
-                        {typeof l.details === "string"
-                          ? l.details
-                          : JSON.stringify(l.details, null, 2)}
-                      </pre>
-                    </details>
-                  </td>
-                </tr>
-              ))}
+              {logs.map((l, idx) => {
+                const serial = (page - 1) * pageSize + idx + 1;
+                return (
+                  <tr
+                    key={l.id || idx}
+                    className="border-b border-gray-800 hover:bg-gray-800/30 text-gray-300"
+                  >
+                    <td className="p-2 text-sm">{serial}</td>
+                    <td className="p-2 text-sm">
+                      {(() => {
+                        try {
+                          if (!l || !l.created_at) return "-";
+                          const d = new Date(l.created_at);
+                          if (isNaN(d.getTime()))
+                            return String(l.created_at || "-");
+
+                          return d.toLocaleString(undefined, {
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          });
+                        } catch (e) {
+                          return "-";
+                        }
+                      })()}
+                    </td>
+                    <td className="p-2 text-sm">
+                      {l.actor_username || l.actor || l.actor_id || "-"}
+                    </td>
+                    <td className="p-2 text-sm text-[#FFD60A]">
+                      {l.action_type}
+                    </td>
+                    <td className="p-2 text-sm ">
+                      {l.target_type
+                        ? `${l.target_type}${
+                            l.target_id ? ` (${l.target_id})` : ""
+                          }`
+                        : "-"}
+                    </td>
+                    <td className="p-2 text-sm">{l.summary || "-"}</td>
+                    <td className="p-2 text-sm">
+                      <details className="text-xs text-gray-400">
+                        <summary className="cursor-pointer">View</summary>
+                        <pre className="whitespace-pre-wrap p-2 text-xs">
+                          {(() => {
+                            try {
+                              if (typeof l.details === "string") {
+                                // try to pretty-print JSON stored as string
+                                try {
+                                  const parsed = JSON.parse(l.details);
+                                  return JSON.stringify(parsed, null, 2);
+                                } catch (e) {
+                                  return l.details;
+                                }
+                              }
+                              if (!l.details) return "-";
+                              return JSON.stringify(l.details, null, 2);
+                            } catch (e) {
+                              return String(l.details || "-");
+                            }
+                          })()}
+                        </pre>
+                      </details>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -177,29 +168,63 @@ export default function LogsTable() {
 
       <div className="flex justify-between items-center mt-3">
         <div className="text-sm text-gray-400">Total: {total}</div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <button
-            disabled={page <= 1}
             onClick={() => {
               const np = Math.max(1, page - 1);
               setPage(np);
               load({ page: np });
             }}
-            className="px-3 py-1 rounded bg-[#18181b] text-gray-300 disabled:opacity-40"
+            disabled={page === 1}
+            className="px-3 py-1 rounded bg-[#18181b] border border-gray-800 text-gray-300 disabled:opacity-40"
           >
-            Prev
+            Previous
           </button>
-          <div className="px-3 py-1 rounded bg-[#18181b] text-gray-300">
-            {page} / {pageCount}
+
+          <div className="flex items-center gap-2">
+            {Array.from({ length: pageCount }, (_, i) => i + 1)
+              .filter((p) => {
+                if (p === 1 || p === pageCount) return true;
+                if (Math.abs(p - page) <= 1) return true;
+                return false;
+              })
+              .reduce((acc, p, idx, arr) => {
+                if (idx > 0 && p - arr[idx - 1] > 1) acc.push("ellipsis");
+                acc.push(p);
+                return acc;
+              }, [])
+              .map((item, idx) =>
+                item === "ellipsis" ? (
+                  <span key={"e-" + idx} className="text-gray-500">
+                    ...
+                  </span>
+                ) : (
+                  <button
+                    key={"p-" + item}
+                    onClick={() => {
+                      setPage(item);
+                      load({ page: item });
+                    }}
+                    className={`px-3 py-1 rounded-lg border ${
+                      page === item
+                        ? "bg-blue-600 border-blue-700 text-white"
+                        : "bg-[#18181b] border-gray-800 text-gray-300"
+                    }`}
+                  >
+                    {item}
+                  </button>
+                )
+              )}
           </div>
+
           <button
-            disabled={page >= pageCount}
             onClick={() => {
               const np = Math.min(pageCount, page + 1);
               setPage(np);
               load({ page: np });
             }}
-            className="px-3 py-1 rounded bg-[#18181b] text-gray-300 disabled:opacity-40"
+            disabled={page === pageCount || pageCount === 0}
+            className="px-3 py-1 rounded bg-[#18181b] border border-gray-800 text-gray-300 disabled:opacity-40"
           >
             Next
           </button>

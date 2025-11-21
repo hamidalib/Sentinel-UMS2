@@ -16,11 +16,32 @@ async function safeInsert(params) {
 
     await r.query(
       `INSERT INTO AuditLogs (actor_id, actor_username, actor_role, action_type, target_type, target_id, summary, details, ip_address, user_agent, created_at)
-       VALUES (@actor_id, @actor_username, @actor_role, @action_type, @target_type, @target_id, @summary, @details, @ip_address, @user_agent, GETDATE())`
+       VALUES (@actor_id, @actor_username, @actor_role, @action_type, @target_type, @target_id, @summary, @details, @ip_address, @user_agent, SYSUTCDATETIME())`
     );
   } catch (err) {
     console.error("Audit log insert failed:", err?.message || err);
   }
+}
+
+function getClientIp(req) {
+  let ip =
+    req.headers["x-forwarded-for"]?.split(",")[0].trim() ||
+    req.connection?.remoteAddress ||
+    req.socket?.remoteAddress ||
+    req.ip ||
+    null;
+
+  // Remove IPv6 prefix if present
+  if (ip && ip.startsWith("::ffff:")) {
+    ip = ip.replace("::ffff:", "");
+  }
+
+  // Localhost mapping
+  if (ip === "::1") {
+    ip = "127.0.0.1";
+  }
+
+  return ip;
 }
 
 export async function logAction({
@@ -40,12 +61,7 @@ export async function logAction({
     actorUsername || (req && req.user && req.user.username) || null;
   const actor_role = actorRole || (req && req.user && req.user.role) || null;
 
-  const ip =
-    (req &&
-      (req.headers["x-forwarded-for"] ||
-        req.connection?.remoteAddress ||
-        req.ip)) ||
-    null;
+  const ip = (req && getClientIp(req)) || null;
   const ua = req && req.headers && (req.headers["user-agent"] || null);
 
   const payload = {

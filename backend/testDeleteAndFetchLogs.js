@@ -1,8 +1,13 @@
 // Create a record, delete it, then fetch logs to verify delete audit entry
 (async function () {
   try {
-    const token =
-      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXNlcm5hbWUiOiJkZXYiLCJyb2xlIjoiYWRtaW4iLCJpYXQiOjE3NjM1NTQ2NDcsImV4cCI6MTc2MzU1ODI0N30.PnNF2zJLhB1UL6H4vJ7irJcCOJ2Fvs-k0OMLmjz8eBc";
+    await (await import("dotenv")).config();
+    const { default: jwt } = await import("jsonwebtoken");
+    const token = jwt.sign(
+      { id: 1, username: "dev", role: "admin" },
+      process.env.JWT_SECRET || "dev-secret",
+      { expiresIn: "1h" }
+    );
 
     // Create a new record
     let res = await fetch("http://localhost:5000/api/records/create", {
