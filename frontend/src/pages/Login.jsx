@@ -1,5 +1,11 @@
 import React, { useState } from "react";
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  CardFooter,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -16,7 +22,10 @@ function Login({ onLoginSuccess }) {
     setError("");
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/login", {
+      const myHitAddress = `http://192.168.100.60:${
+        process.env.REACT_APP_BACKEND_PORT || 5000
+      }`;
+      const res = await fetch(`${myHitAddress}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -32,7 +41,6 @@ function Login({ onLoginSuccess }) {
 
       localStorage.setItem("token", data.token);
       onLoginSuccess(data.token);
-
     } catch (err) {
       setError("Something went wrong");
     } finally {
