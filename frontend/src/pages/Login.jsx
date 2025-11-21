@@ -22,8 +22,11 @@ function Login({ onLoginSuccess }) {
     setError("");
 
     try {
-      const myHitAddress = `http://192.168.100.60:5000`;
-      const res = await fetch(`${myHitAddress}/api/auth/login`, {
+      // Prefer configured Vite env var `VITE_API_URL`, otherwise fall back
+      // to the office server IP used during development.
+      const API_BASE =
+        import.meta.env.VITE_API_URL || "http://192.168.100.60:5000";
+      const res = await fetch(`${API_BASE.replace(/\/$/, "")}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -40,7 +43,8 @@ function Login({ onLoginSuccess }) {
       localStorage.setItem("token", data.token);
       onLoginSuccess(data.token);
     } catch (err) {
-      setError("Something went wrong");
+      console.error("Login error:", err);
+      setError(err?.message || "Something went wrong");
     } finally {
       setLoading(false);
     }
