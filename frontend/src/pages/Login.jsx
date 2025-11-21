@@ -22,9 +22,7 @@ function Login({ onLoginSuccess }) {
     setError("");
 
     try {
-      const myHitAddress = `http://192.168.100.60:${
-        process.env.REACT_APP_BACKEND_PORT || 5000
-      }`;
+      const myHitAddress = `http://192.168.100.60:5000`;
       const res = await fetch(`${myHitAddress}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
