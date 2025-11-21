@@ -1,6 +1,9 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
 import { connectDB } from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
 import recordRoutes from "./routes/recordRoutes.js";
@@ -12,13 +15,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Test route
-app.get("/", (req, res) => {
-  res.send("Server is running...");
-});
-
-// Health check route
-app.get("/health", (req, res) => {
+// Health check route (API)
+// Exposed at /api/health so SPA root (/) can be served by the frontend build.
+app.get("/api/health", (req, res) => {
   res.json({ status: "ok", message: "Server is running" });
 });
 
@@ -31,6 +30,26 @@ app.use("/api/users", authRoutes);
 // Also keep /api/auth for backward compatibility if needed
 app.use("/api/auth", authRoutes);
 app.use("/api/logs", logRoutes);
+
+// Serve frontend static build if available
+// Resolve __dirname in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const frontendDist = path.join(__dirname, "../frontend/dist");
+
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+
+  // SPA fallback: serve index.html for non-API routes
+  // Use app.use with a function to avoid path-to-regexp parsing of '*' which
+  // can throw in some router/path-to-regexp versions.
+  app.use((req, res, next) => {
+    if (req.path.startsWith("/api")) return next();
+    res.sendFile(path.join(frontendDist, "index.html"));
+  });
+} else {
+  console.warn("Frontend dist folder not found at:", frontendDist);
+}
 
 // Connect Database and start server
 const startServer = async () => {
