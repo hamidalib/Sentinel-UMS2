@@ -8,15 +8,25 @@ const isNamedInstance =
   process.env.DB_SERVER && process.env.DB_SERVER.includes("\\");
 
 // Build database configuration
+// Parse server/instance when DB_SERVER contains a named instance (e.g. HOST\\SQLEXPRESS)
+let serverHost = process.env.DB_SERVER || "";
+let instanceName = undefined;
+if (serverHost.includes("\\")) {
+  const parts = serverHost.split("\\\\");
+  serverHost = parts[0];
+  instanceName = parts.slice(1).join("\\");
+}
+
 const dbConfig = {
   user: process.env.DB_USER,
   password: process.env.DB_PASS,
-  server: process.env.DB_SERVER, // e.g. localhost\SQLEXPRESS
+  server: serverHost, // host portion; instanceName (if present) goes into options
   database: process.env.DB_NAME,
   options: {
     trustServerCertificate: true,
     encrypt: false, // local connections
     enableArithAbort: true,
+    ...(instanceName ? { instanceName } : {}),
   },
 };
 

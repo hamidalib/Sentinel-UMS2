@@ -155,6 +155,11 @@ router.post("/login", async (req, res) => {
   }
 
   try {
+    if (!pool || typeof pool.request !== "function") {
+      console.error("LOGIN ERROR: database pool is not available");
+      return res.status(503).json({ error: "Database not connected" });
+    }
+
     const request = pool.request();
     request.input("username", sql.NVarChar(50), username);
 

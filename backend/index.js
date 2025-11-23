@@ -35,7 +35,7 @@ app.use("/api/logs", logRoutes);
 // Resolve __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const frontendDist = path.join(__dirname, "../frontend/dist");
+const frontendDist = path.join(__dirname, "/frontend/dist");
 
 if (fs.existsSync(frontendDist)) {
   app.use(express.static(frontendDist));
