@@ -138,12 +138,10 @@ router.get("/count", verifyToken, async (req, res) => {
 router.post("/login", async (req, res) => {
   // Be defensive: ensure a JSON body was provided
   if (!req.body || typeof req.body !== "object") {
-    return res
-      .status(400)
-      .json({
-        error:
-          "Request body missing or invalid. Send JSON { username, password }",
-      });
+    return res.status(400).json({
+      error:
+        "Request body missing or invalid. Send JSON { username, password }",
+    });
   }
 
   const { username, password } = req.body || {};
@@ -206,6 +204,14 @@ router.post("/login", async (req, res) => {
         );
       }
       return res.status(401).json({ error: "Invalid username or password" });
+    }
+
+    // Ensure JWT secret exists before signing
+    if (!process.env.JWT_SECRET) {
+      console.error("JWT_SECRET is not configured. Cannot sign tokens.");
+      return res.status(500).json({
+        error: "Server configuration error: JWT secret is missing",
+      });
     }
 
     // Generate JWT token

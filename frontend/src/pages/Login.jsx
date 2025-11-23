@@ -23,19 +23,56 @@ function Login({ onLoginSuccess }) {
 
     try {
       // Prefer configured Vite env var `VITE_API_URL`, otherwise fall back
-      // to the office server IP used during development.
-      const API_BASE =
-        import.meta.env.VITE_API_URL || "http://192.168.100.60:5000";
-      const res = await fetch(`${API_BASE.replace(/\/$/, "")}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
+      // to the office server IP used during development. Ensure protocol exists.
+      let API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
+      if (!API_BASE.startsWith("http://") && !API_BASE.startsWith("https://")) {
+        API_BASE = `http://${API_BASE}`;
+      }
 
-      const data = await res.json();
+      const url = `${API_BASE.replace(/\/$/, "")}/api/auth/login`;
+
+      let res;
+      try {
+        res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        });
+      } catch (networkErr) {
+        console.error("Network error when calling login:", networkErr, url);
+        setError(
+          `Network error: failed to reach ${url}. Check server and CORS.`
+        );
+        setLoading(false);
+        return;
+      }
+
+      // Read response safely: some errors may return plain text or empty body
+      const contentType = res.headers.get("content-type") || "";
+      let bodyText = null;
+      try {
+        if (contentType.includes("application/json")) {
+          bodyText = await res.json();
+        } else {
+          bodyText = await res.text();
+        }
+      } catch (e) {
+        bodyText = null;
+      }
 
       if (!res.ok) {
-        setError(data.error || "Login failed");
+        const message =
+          (bodyText && bodyText.error) ||
+          (typeof bodyText === "string" && bodyText) ||
+          `Login failed (${res.status})`;
+        setError(message);
+        setLoading(false);
+        return;
+      }
+
+      const data = typeof bodyText === "object" ? bodyText : null;
+      if (!data || !data.token) {
+        setError("Login succeeded but server returned no token");
         setLoading(false);
         return;
       }

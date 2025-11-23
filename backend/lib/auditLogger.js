@@ -2,6 +2,12 @@ import { pool, sql } from "../config/db.js";
 
 async function safeInsert(params) {
   try {
+    if (!pool) {
+      console.warn(
+        "Audit logger: DB pool not initialized yet, skipping audit insert"
+      );
+      return;
+    }
     const r = pool.request();
     r.input("actor_id", sql.Int, params.actor_id || null);
     r.input("actor_username", sql.NVarChar(50), params.actor_username || null);
